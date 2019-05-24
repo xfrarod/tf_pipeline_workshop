@@ -1,7 +1,7 @@
  pipeline {
     agent {
         docker {
-            image 'digitalonus/terraform_hub:0.11.10'
+            image 'docker-test/terraform_image:latest'
         }
     }
     environment {
