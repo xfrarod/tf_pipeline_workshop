@@ -6,8 +6,7 @@
         }
     }
     environment {
-        TOKEN = credentials('gh-token')
-        DIGITALOCEAN_TOKEN = sh script:"vault login -method=github token=${TOKEN} > /dev/null 2>&1 && vault kv get -field=token workshop/mons3rrat/digitalocean"
+        DIGITALOCEAN_TOKEN = sh script:"vault kv get -field=token workshop/mons3rrat/digitalocean"
     }
     triggers {
          pollSCM('H/5 * * * *')
@@ -38,13 +37,13 @@
             }
         }
         stage('apply') {
-            when { expression{ env.BRANCH_NAME ==~ /master.*/} }
+            when { expression{ env.BRANCH_NAME ==~ /dev.*/ || env.BRANCH_NAME ==~ /PR.*/ || env.BRANCH_NAME ==~ /feat.*/ } }
             steps {
                 sh 'cd terraform && terraform apply -input=false plan'
             }
         }
         stage('destroy') {
-            when { expression{ env.BRANCH_NAME ==~ /master.*/ } }
+            when { expression{ env.BRANCH_NAME ==~ /dev.*/ || env.BRANCH_NAME ==~ /PR.*/ || env.BRANCH_NAME ==~ /feat.*/ } }
             steps {
                 sh 'cd terraform && terraform destroy -force -input=false'
             }
