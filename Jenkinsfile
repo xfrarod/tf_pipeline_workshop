@@ -6,7 +6,7 @@
         }
     }
     environment {
-        DIGITALOCEAN_TOKEN = sh script:"vault kv get -field=token workshop/mons3rrat/digitalocean"
+        DIGITALOCEAN_TOKEN = sh(script:'vault kv get -field=token workshop/mons3rrat/digitalocean > /dev/null 2>&1')
     }
     triggers {
          pollSCM('H/5 * * * *')
