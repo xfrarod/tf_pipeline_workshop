@@ -1,12 +1,13 @@
  pipeline {
     agent {
         docker {
-            image 'docker-test/terraform_image:latest'
+            image 'digitalonus/terraform_hub:0.11.10'
         }
     }
     environment {
         DIGITALOCEAN_TOKEN= credentials('DO_TOKEN')
         TOKEN = credentials('gh-token')
+        GITUSER = credentials('git_user')
     }
     triggers {
          pollSCM('H/5 * * * *')
@@ -24,18 +25,15 @@
             sh 'cd terraform && terraform validate'    
           }
         }
-        stage('plan'){
+        stage('plan and create PR'){
             when { expression{ env.BRANCH_NAME ==~ /dev.*/ || env.BRANCH_NAME ==~ /PR.*/ || env.BRANCH_NAME ==~ /feat.*/ } }
             steps {
-                sh 'cd terraform && terraform plan -out=plan -input=false'
-                input(message: "Do you want to create a PR to apply this plan?", ok: "yes")
-            }
-        }
-        stage('Generate PR'){
-            when { expression{ env.BRANCH_NAME ==~ /dev.*/ || env.BRANCH_NAME ==~ /PR.*/ || env.BRANCH_NAME ==~ /feat.*/  } }
-            steps{
-                createPR "mons3rrat", "PR Created Automatically by Jenkins", "master", env.BRANCH_NAME, "mons3rrat"
-                //slackSend baseUrl: readProperties.slack, channel: '#dou-workshop', color: '#00FF00', message: "Please review and approve PR to merge changes to dev branch : https://github.com/mons3rrat/tf_pipeline_workshop/pulls"
+                script {
+                    def COMMIT_MESSAGE = sh(script:'git log -1 --pretty=%B', returnStdout: true).trim()
+                    sh "cd terraform && terraform plan -out=plan -input=false"
+                    input(message: "Do you want to create a PR to apply this plan?", ok: "yes")
+                    httpRequest authentication: 'git_user', contentType: 'APPLICATION_JSON_UTF8', httpMode: 'POST', requestBody: """{ "title": "PR Created Automatically by Jenkins", "body": "${COMMIT_MESSAGE} \n From Jenkins job: ${env.BUILD_URL} ", "head": "mons3rrat:${env.BRANCH_NAME}", "base": "master"}""", url: "https://api.github.com/repos/mons3rrat/tf_pipeline_workshop/pulls"
+                }
             }
         }
         stage('apply') {
@@ -60,19 +58,3 @@
       }
     }
 }
-
-def createPR (user, title, tobranch, frombranch, org){
-  def COMMIT_MESSAGE = sh(script:'git log -1 --pretty=%B', returnStdout: true).trim()
-  sh 'if [ ! -d ~/.config ]; then $(which sudo) mkdir ~/.config;fi'
-  sh 'echo "github.com:" >> ~/.config/hub'
-  sh "echo \"- user: ${user}\" >> ~/.config/hub"
-  sh "echo \"  oauth_token: ${env.TOKEN}\" >> ~/.config/hub"
-  sh 'echo "  protocol: https" >> ~/.config/hub'
-  try {
-      sh "git checkout ${env.BRANCH_NAME}"
-      sh "hub pull-request -m \"${title}\n ${COMMIT_MESSAGE} \n From Jenkins job: ${env.BUILD_URL} \" -b ${org}:${tobranch} -h ${org}:${frombranch}"
-  }catch(Exception e) {
-      echo "PR already created"
-  }
-}
-
