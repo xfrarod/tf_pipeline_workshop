@@ -1,3 +1,4 @@
+ def builduser = null
  pipeline {
     agent {
         docker {
@@ -5,9 +6,8 @@
         }
     }
     environment {
-        DIGITALOCEAN_TOKEN= credentials('DO_TOKEN')
         TOKEN = credentials('gh-token')
-        GITUSER = credentials('git_user')
+        DIGITALOCEAN_TOKEN = sh script:"vault login -method=github token=${TOKEN} > /dev/null 2>&1 && vault kv get -field=token workshop/mons3rrat/digitalocean"
     }
     triggers {
          pollSCM('H/5 * * * *')
@@ -29,10 +29,11 @@
             when { expression{ env.BRANCH_NAME ==~ /dev.*/ || env.BRANCH_NAME ==~ /PR.*/ || env.BRANCH_NAME ==~ /feat.*/ } }
             steps {
                 script {
-                    def COMMIT_MESSAGE = sh(script:'git log -1 --pretty=%B', returnStdout: true).trim()
+                    def jobName = "tf_pipeline_workshop"
+                    wrap([$class: 'BuildUser']) {builduser = env.BUILD_USER_ID}
                     sh "cd terraform && terraform plan -out=plan -input=false"
                     input(message: "Do you want to create a PR to apply this plan?", ok: "yes")
-                    httpRequest authentication: 'git_user', contentType: 'APPLICATION_JSON_UTF8', httpMode: 'POST', requestBody: """{ "title": "PR Created Automatically by Jenkins", "body": "${COMMIT_MESSAGE} \n From Jenkins job: ${env.BUILD_URL} ", "head": "mons3rrat:${env.BRANCH_NAME}", "base": "master"}""", url: "https://api.github.com/repos/mons3rrat/tf_pipeline_workshop/pulls"
+                    httpRequest authentication: 'git_user', contentType: 'APPLICATION_JSON_UTF8', httpMode: 'POST', requestBody: """{ "title": "PR Created Automatically by Jenkins", "body": "From Jenkins job: ${env.BUILD_URL}", "head": "${builduser}:${env.BRANCH_NAME}", "base": "master"}""", url: "https://api.github.com/repos/${builduser}/${jobName}/pulls"
                 }
             }
         }
